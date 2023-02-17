@@ -1,47 +1,60 @@
-# setwd("~/Documents/GitHub/A2-mapping")
+setwd("~/Documents/GitHub/A2-mapping")
 load("working_progress.RData")
 library(shiny)
 library(leaflet)
 library(dplyr)
+library(sf)
+library(htmltools)
+library(htmlwidgets)
 library(googlesheets4)
-#library(leaflet.extras)
+library(ggmap)
+library(tigris)
+library(leaflet.extras)
 
-# gs4_deauth()
-# URL <- "https://docs.google.com/spreadsheets/d/1rr6ZKZ76nstJXZHqo1QhtZlttXp2kFb7pJrJeiGdt-g/edit#gid=0"
-# location = read_sheet(URL)
+gs4_deauth()
+URL <- "https://docs.google.com/spreadsheets/d/1rr6ZKZ76nstJXZHqo1QhtZlttXp2kFb7pJrJeiGdt-g/edit#gid=0"
+location = read_sheet(URL)
+location = location %>% filter(is.na(lat) == FALSE) %>% st_as_sf(coords = c("lon","lat"), crs = 4326)
+states_sf = states()
 ui <- fluidPage(
-  
+  absolutePanel(top = 10, right = 10,
+    selectInput(inputId = "Issue",
+                label = "Select a climate/environmental issue:",
+                choices = c("All","Flooding","Air Pollution","Water Contamination", "Drought","Heat")),
+    selectInput(inputId = "Strategy",
+                label = "Select a strategy:",
+                choices = c("All",
+                            "Affordable Housing",
+                            "Art Activism",
+                            "Community Farm/Gardens",
+                            "Community Land Trusts/Land Conservation",
+                            "Community Science",
+                            "Direct Relief and Aid",
+                            "Elevation or Relocation of Homes",
+                            "Fighting Industrial Contamination",
+                            "Green Infrastructure",
+                            "Halting Bad Development",
+                            "Nature-Based Solutions",
+                            "Policy Reform",
+                            "Renewable Energy",
+                            "Rights of Nature")),
+    style = "opacity: 1; z-index: 10;"
+  ),
   sidebarLayout(
+    
     sidebarPanel(
       style = "position: fixed; height: 100%;width: 350px; overflow-y: auto; margin-left: +95px;", 
       div(style = "display:inline-block; float:left; margin-bottom: 20px"),
+      
       uiOutput("SidebarTitle"), 
-      selectInput(inputId = "Issue",
-                  label = "Select a climate/environmental issue:",
-                  choices = c("All","Flooding","Air Pollution","Water Contamination", "Drought","Heat")),
-      selectInput(inputId = "Strategy",
-                  label = "Select a strategy:",
-                  choices = c("Affordable Housing",
-                              "Art Activism",
-                              "Community Farm/Gardens",
-                              "Community Land Trusts/Land Conservation",
-                              "Community Science",
-                              "Direct Relief and Aid",
-                              "Elevation or Relocation of Homes",
-                              "Fighting Industrial Contamination",
-                              "Green Infrastructure",
-                              "Halting Bad Development",
-                              "Nature-Based Solutions",
-                              "Policy Reform",
-                              "Renewable Energy",
-                              "Rights of Nature")),
+      
       
       uiOutput("SidebarSelect"), 
-      
       uiOutput("SidebarDescContent", style = "max-height: 350px; overflow-y: scroll; margin-right: -10px;  margin-bottom: 10px; margin-top:10px;"),
       uiOutput("video"),
+      uiOutput("image"),
       uiOutput("SidebarHeaderContent"), 
-      uiOutput("logo"),
+      
       # output for different service area
       
       # uiOutput("ComponentSelect"),  
@@ -76,19 +89,27 @@ server <- function(input, output) {
 
 
     })
+    
+    rr <- tags$div(
+      HTML('<img border="0" alt="Anthropocence Alliance: Our Communities" src="https://anthropocenealliance.org/wp-content/uploads/2022/10/Aa-logo-white-200x200-retina.png" width="30" height="30">  <font size="+2">Anthropocence Alliance: Our Communities</font>')
+    )  
   ### Main Map Body ###
   output$Map <- renderLeaflet({
     
     # LayerList$df <- AllDataReactive$df %>% pull(NAME) %>% unique()
     # geo_data <- map_data()
     leaflet() %>%
-      addProviderTiles(providers$CartoDB.VoyagerNoLabels, group = "Voyager") %>%
-      addProviderTiles(providers$OpenTopoMap, group = "Topo") %>%
+      addProviderTiles(providers$GeoportailFrance.orthos, group = "Geoportail") %>%
+        # addProviderTiles(providers$USGS.USImagery, group = "USGS") %>%
       addProviderTiles(providers$Stamen.TonerLite, group = "Toner Lite") %>%
-      addLayersControl(baseGroups = c("Voyager","Topo","Toner Lite", "World Imagery")) %>%
+      addProviderTiles(providers$Esri.WorldImagery, group = "World Imagery") %>%
+
+      addLayersControl(baseGroups = c("Geoportail","World Imagery","Toner Lite")) %>%
+      addPolygons(data = states_sf, color = "black", weight = 1, label = ~STUSPS ) %>%
       addMarkers( data = location,
                  label = ~`Name of group`,
                  clusterOptions = markerClusterOptions(),
+                 
                  popup = ~paste("<b>Name of the member:</b>",`Name of group`,
                                 "<br>",
                                 "<b>Point of contact:</b>",`Leaders name`,
@@ -100,7 +121,8 @@ server <- function(input, output) {
                                 "<b>State:</b>",`State`,
                                 "<br>"
                                 )
-      ) %>% 
+      ) %>%  
+      addControl(rr, position = "topleft")%>%
       setView(lat = 41.62531, lng = -97.71755, zoom = 5)
     
     # leaflet("Map")%>%
@@ -128,7 +150,7 @@ server <- function(input, output) {
   
   ## Sidebar title 
   output$SidebarTitle <- renderUI({
-    h1("A2 membership map")
+    h2("Member Name")
   })
   
   # ## Sidebar Tabset Panel 
@@ -162,15 +184,15 @@ server <- function(input, output) {
     HTML(Description)
   })
   output$video <- renderUI({
-  Videolink <- paste("<b>Video:</b>",
+  Videolink <- paste(
                      "<br>",
                      '<iframe width="300" height="169" src="https://www.youtube.com/embed/YftutAJeXAU?showinfo=0" frameborder="0" allowfullscreen></iframe>',
                      "<br>", 
                      "<br>" )
   HTML(Videolink)
   })
-  output$logo <- renderUI({
-    img  = c("<img src='https://thrivingearthexchange.org/wp-content/uploads/2021/08/Anthropocene-Alliance-Logo.jpg' width = 150 />")
+  output$image <- renderUI({
+    img  = c("<img src='https://photos.smugmug.com/photos/i-XSjMkLd/0/X3/i-XSjMkLd-X3.jpg' width = 300 />")
     HTML(img)
     })
   ## Sidebar Content
