@@ -1,5 +1,5 @@
-setwd("~/Documents/GitHub/A2-mapping")
-load("working_progress.RData")
+# setwd("~/Documents/GitHub/A2-mapping")
+# load("working_progress.RData")
 library(shiny)
 library(leaflet)
 library(dplyr)
@@ -12,11 +12,24 @@ library(tigris)
 library(leaflet.extras)
 
 gs4_deauth()
-URL <- "https://docs.google.com/spreadsheets/d/1rr6ZKZ76nstJXZHqo1QhtZlttXp2kFb7pJrJeiGdt-g/edit#gid=0"
+URL <- "https://docs.google.com/spreadsheets/d/18QrhmTteBi6U4lSwAIBWnyqWKYoOPOiGCt7NHQRtf_Y/edit#gid=0"
 location = read_sheet(URL)
-location = location %>% filter(is.na(lat) == FALSE) %>% st_as_sf(coords = c("lon","lat"), crs = 4326)
+location = location   %>% mutate(lat = unlist(lat),
+                                 lon = unlist(lon)) %>% 
+  filter(!lat == "NA") %>%
+  # filter()
+  st_as_sf(coords = c("lon","lat"), crs = 4326)
 states_sf = states()
 ui <- fluidPage(
+  absolutePanel(
+                HTML('<img border="0" alt="Anthropocence Alliance: Our Communities" src="https://anthropocenealliance.org/wp-content/uploads/2022/10/Aa-logo-white-200x200-retina.png" width="40" height="40">  <font size="+2">Anthropocence Alliance: Our Communities</font>'),
+                
+                style = "font-weight: bold; top: 5px; right: 460px; text-align: center;
+                opacity: 1; z-index: 10;
+                         background: #242526;
+                         color: white;
+                         border-radius: 10px;
+                         padding: 10px;"),
   absolutePanel(top = 10, right = 10,
     selectInput(inputId = "Issue",
                 label = "Select a climate/environmental issue:",
@@ -38,12 +51,18 @@ ui <- fluidPage(
                             "Policy Reform",
                             "Renewable Energy",
                             "Rights of Nature")),
-    style = "opacity: 1; z-index: 10;"
+    style = "opacity: 1; z-index: 10;
+    background: #F5F5F5;
+    border-radius: 10px;
+    padding: 10px;
+    
+    ",
+    # setBackgroundColor("ghostwhite")
   ),
   sidebarLayout(
     
     sidebarPanel(
-      style = "position: fixed; height: 100%;width: 350px; overflow-y: auto; margin-left: +95px;", 
+      style = "position: fixed; height: 100%; width: 350px; overflow-y: auto; margin-left: +30px; z-index: 10;", 
       div(style = "display:inline-block; float:left; margin-bottom: 20px"),
       
       uiOutput("SidebarTitle"), 
@@ -51,9 +70,10 @@ ui <- fluidPage(
       
       uiOutput("SidebarSelect"), 
       uiOutput("SidebarDescContent", style = "max-height: 350px; overflow-y: scroll; margin-right: -10px;  margin-bottom: 10px; margin-top:10px;"),
+      uiOutput("SidebarHeaderContent"), 
       uiOutput("video"),
       uiOutput("image"),
-      uiOutput("SidebarHeaderContent"), 
+      
       
       # output for different service area
       
@@ -90,15 +110,15 @@ server <- function(input, output) {
 
     })
     
-    rr <- tags$div(
-      HTML('<img border="0" alt="Anthropocence Alliance: Our Communities" src="https://anthropocenealliance.org/wp-content/uploads/2022/10/Aa-logo-white-200x200-retina.png" width="30" height="30">  <font size="+2">Anthropocence Alliance: Our Communities</font>')
-    )  
+    # rr <- tags$div(
+    #   HTML('<img border="0" alt="Anthropocence Alliance: Our Communities" src="https://anthropocenealliance.org/wp-content/uploads/2022/10/Aa-logo-white-200x200-retina.png" width="30" height="30">  <font size="+2">Anthropocence Alliance: Our Communities</font>')
+    # )  
   ### Main Map Body ###
   output$Map <- renderLeaflet({
     
     # LayerList$df <- AllDataReactive$df %>% pull(NAME) %>% unique()
     # geo_data <- map_data()
-    leaflet() %>%
+    leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
       addProviderTiles(providers$GeoportailFrance.orthos, group = "Geoportail") %>%
         # addProviderTiles(providers$USGS.USImagery, group = "USGS") %>%
       addProviderTiles(providers$Stamen.TonerLite, group = "Toner Lite") %>%
@@ -108,7 +128,34 @@ server <- function(input, output) {
       addPolygons(data = states_sf, color = "black", weight = 1, label = ~STUSPS ) %>%
       addMarkers( data = location,
                  label = ~`Name of group`,
-                 clusterOptions = markerClusterOptions(),
+                 clusterOptions = markerClusterOptions(
+                   # iconCreateFunction= JS("
+                   #  return new L.DivIcon({ html: '<b>' + cluster.getChildCount() + '</b>' }
+                   # ")
+                   iconCreateFunction= JS(
+
+                   "function (cluster) {
+                    var childCount = cluster.getChildCount();
+                    var c = ' marker-cluster-';
+                    var size = 0;
+                    if (childCount < 5) {
+                      c +=  'small';
+                      size += 40;
+                    } else if (childCount < 10) {
+                       c +=  'medium';
+                      size += 45;
+                    } else {
+                      c +=  'large';
+                      size += 50;
+
+                    }
+                    return new L.DivIcon({ html: '<div><span>' + childCount + '</span></div>',
+                    className: 'marker-cluster' + c,
+                    iconSize: new L.Point(size, size) });
+
+                  }"
+                   )
+                 ),
                  
                  popup = ~paste("<b>Name of the member:</b>",`Name of group`,
                                 "<br>",
@@ -122,8 +169,13 @@ server <- function(input, output) {
                                 "<br>"
                                 )
       ) %>%  
-      addControl(rr, position = "topleft")%>%
-      setView(lat = 41.62531, lng = -97.71755, zoom = 5)
+      addLegend(colors = c("green","orange","red"), labels = c("0-5","5-10","greter than 10"),title = 'Cluster Size',
+                      position = 'bottomright') %>%
+      # addControl(rr, position = "topleft")%>%
+      setView(lat = 41.62531, lng = -97.71755, zoom = 5) %>% 
+      htmlwidgets::onRender("function(el, x) {
+        L.control.zoom({ position: 'bottomright' }).addTo(this)
+    }") 
     
     # leaflet("Map")%>%
     #   addProviderTiles(providers$CartoDB.VoyagerNoLabels)%>%
