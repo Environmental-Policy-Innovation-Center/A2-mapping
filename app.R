@@ -14,23 +14,29 @@ library(leaflet.extras)
 gs4_deauth()
 URL <- "https://docs.google.com/spreadsheets/d/18QrhmTteBi6U4lSwAIBWnyqWKYoOPOiGCt7NHQRtf_Y/edit#gid=0"
 location = read_sheet(URL)
+# location = location   %>% mutate(lat = unlist(lat),
+#                                  lon = unlist(lon)) %>% as.data.frame() %>% 
+#   filter(!lat == "NA") %>%
+#   # filter()
+#   st_as_sf(coords = c("lon","lat"), crs = 4326)
 location = location   %>% mutate(lat = unlist(lat),
-                                 lon = unlist(lon)) %>% 
-  filter(!lat == "NA") %>%
-  # filter()
-  st_as_sf(coords = c("lon","lat"), crs = 4326)
+                                 lon = unlist(lon)) %>% as.data.frame() %>% 
+  dplyr::rename(lng = lon) %>%
+  filter(!lat == "NA")
+
 states_sf = states()
+
 ui <- fluidPage(
   absolutePanel(
                 HTML('<img border="0" alt="Anthropocence Alliance: Our Communities" src="https://anthropocenealliance.org/wp-content/uploads/2022/10/Aa-logo-white-200x200-retina.png" width="40" height="40">  <font size="+2">Anthropocence Alliance: Our Communities</font>'),
                 
-                style = "font-weight: bold; top: 5px; right: 460px; text-align: center;
+                style = "font-weight: bold; width: 100%;  text-align: center;
                 opacity: 1; z-index: 10;
                          background: #242526;
                          color: white;
                          border-radius: 10px;
                          padding: 10px;"),
-  absolutePanel(top = 10, right = 10,
+  absolutePanel(top = 70, right = 50,
     selectInput(inputId = "Issue",
                 label = "Select a climate/environmental issue:",
                 choices = c("All","Flooding","Air Pollution","Water Contamination", "Drought","Heat")),
@@ -62,14 +68,20 @@ ui <- fluidPage(
   sidebarLayout(
     
     sidebarPanel(
-      style = "position: fixed; height: 100%; width: 350px; overflow-y: auto; margin-left: +30px; z-index: 10;", 
+      style = "position: fixed; 
+      height: 93%; 
+      width: 34.5%; 
+      overflow-y: auto; 
+      top: 70px; 
+      bottom:1px;
+      z-index: 10;", 
       div(style = "display:inline-block; float:left; margin-bottom: 20px"),
       
       uiOutput("SidebarTitle"), 
       
       
       uiOutput("SidebarSelect"), 
-      uiOutput("SidebarDescContent", style = "max-height: 350px; overflow-y: scroll; margin-right: -10px;  margin-bottom: 10px; margin-top:10px;"),
+      uiOutput("SidebarDescContent", style = "max-height: 300px; max-width: 95% overflow-y: scroll; margin-right: -10px;  margin-bottom: 10px; margin-top:10px;"),
       uiOutput("SidebarHeaderContent"), 
       uiOutput("video"),
       uiOutput("image"),
@@ -86,48 +98,66 @@ ui <- fluidPage(
     
     mainPanel(
       leafletOutput("Map", height = "100vh"),
-      style = "margin-left: -30px;",
-      width = 9),
+
+      style = "right: 1px;
+      width: 65%;
+      position: fixed;"
+      ),
     
-    
+      
     position = c("left"), fluid = FALSE)
 )
 
 
 server <- function(input, output) {
-    map_data <- reactive({
-      ifelse(input$Issue == "All", location,
-      location %>%
-       filter(grepl(input$Issue,`Which of the following climate or environmental impacts affects your community?`) )
-      )
-      # sf_states_lite %>%
-      #   # mutate(net_funding = total_funding * (100 - input$pct_survey)/100) %>%
-      #   # mutate(net_funding = total_funding ) %>% # net funding no longer includes sutraction of survey funding
-      #   mutate(number_of_pipes_replaced = total_funding / input$Pb_cost) %>%
-      #   mutate(pct_pipe_replaced = number_of_pipes_replaced/pb_pipes*100) %>%
-      #   mutate(pct_pipe_replaced = ifelse(pct_pipe_replaced>100, 100, pct_pipe_replaced) )
 
-
-    })
     
     # rr <- tags$div(
     #   HTML('<img border="0" alt="Anthropocence Alliance: Our Communities" src="https://anthropocenealliance.org/wp-content/uploads/2022/10/Aa-logo-white-200x200-retina.png" width="30" height="30">  <font size="+2">Anthropocence Alliance: Our Communities</font>')
     # )  
   ### Main Map Body ###
-  output$Map <- renderLeaflet({
+    # location_1 = reactive(
+    #   ifelse(input$Issue == "All", 
+    #          ifelse(input$Strategy == "All", ## Option A all data
+    #                 location,  
+    #                 location %>% 
+    #                 filter(grepl(input$Strategy,
+    #                 `Which of the following climate or environmental impacts affects your community?`))), ## Option B only filter strategy
+    #           location %>% filter(grepl(input$Issue, `Which of the following climate or environmental impacts affects your community?`)) %>% 
+    #            filter(grepl(input$Strategy,`What strategies are you currently using to address the impacts faced by the community you serve?`))## Option C filter both strategy and issue 
+    #          )
+    # )
     
+    location_1 <- reactive({
+      ifelse(input$Issue == "All", 
+             location,   ## Option A all data
+             location %>% filter(grepl(input$Issue, `Which of the following climate or environmental impacts affects your community?`)) ## Option B filter based on issue
+      )
+      
+    } )
+    
+    # output$table = renderTable({
+    #   location_1() %>% st_drop_geometry()
+    #   })
+  output$Map <- renderLeaflet({
+    req(location_1())
     # LayerList$df <- AllDataReactive$df %>% pull(NAME) %>% unique()
-    # geo_data <- map_data()
+    geo_data <- location_1()
+
     leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
       addProviderTiles(providers$GeoportailFrance.orthos, group = "Geoportail") %>%
         # addProviderTiles(providers$USGS.USImagery, group = "USGS") %>%
       addProviderTiles(providers$Stamen.TonerLite, group = "Toner Lite") %>%
       addProviderTiles(providers$Esri.WorldImagery, group = "World Imagery") %>%
 
-      addLayersControl(baseGroups = c("Geoportail","World Imagery","Toner Lite")) %>%
+      addLayersControl(baseGroups = c("World Imagery","Geoportail","Toner Lite"),position = "bottomright") %>%
       addPolygons(data = states_sf, color = "black", weight = 1, label = ~STUSPS ) %>%
-      addMarkers( data = location,
+      addMarkers( data = geo_data,
+                  
+                  lng = ~lng,
+                  lat = ~lat,
                  label = ~`Name of group`,
+                 # clusterOptions = markerClusterOptions(),
                  clusterOptions = markerClusterOptions(
                    # iconCreateFunction= JS("
                    #  return new L.DivIcon({ html: '<b>' + cluster.getChildCount() + '</b>' }
@@ -137,26 +167,22 @@ server <- function(input, output) {
                    "function (cluster) {
                     var childCount = cluster.getChildCount();
                     var c = ' marker-cluster-';
-                    var size = 0;
                     if (childCount < 5) {
                       c +=  'small';
-                      size += 40;
                     } else if (childCount < 10) {
                        c +=  'medium';
-                      size += 45;
                     } else {
                       c +=  'large';
-                      size += 50;
-
                     }
                     return new L.DivIcon({ html: '<div><span>' + childCount + '</span></div>',
                     className: 'marker-cluster' + c,
-                    iconSize: new L.Point(size, size) });
+                    iconSize: new L.Point(40, 40)
+                    });
 
                   }"
                    )
                  ),
-                 
+
                  popup = ~paste("<b>Name of the member:</b>",`Name of group`,
                                 "<br>",
                                 "<b>Point of contact:</b>",`Leaders name`,
@@ -168,34 +194,34 @@ server <- function(input, output) {
                                 "<b>State:</b>",`State`,
                                 "<br>"
                                 )
-      ) %>%  
-      addLegend(colors = c("green","orange","red"), labels = c("0-5","5-10","greter than 10"),title = 'Cluster Size',
+      ) %>%
+      addLegend(colors = c("green","orange","red"), labels = c("0-5","5-10","greater than 10"),title = 'Communities Count',
                       position = 'bottomright') %>%
       # addControl(rr, position = "topleft")%>%
-      setView(lat = 41.62531, lng = -97.71755, zoom = 5) %>% 
+      # setView(lat = 41.62531, lng = -97.71755, zoom = 5) %>%
       htmlwidgets::onRender("function(el, x) {
         L.control.zoom({ position: 'bottomright' }).addTo(this)
-    }") 
-    
-    # leaflet("Map")%>%
-    #   addProviderTiles(providers$CartoDB.VoyagerNoLabels)%>%
-    #   addMapPane("Cities and Counties", zIndex = 500)%>%
-    #   addMapPane("Federal", zIndex = 200) %>%
-    #   addMapPane("States", zIndex = 450) %>%
-    #   addMapPane("Labels", zIndex = 500) %>%
-    #   
-    #   addPolygons(data = CitiesCounties, group = "Cities and Counties", layerId = ~NAME,  options = leafletOptions(pane = "Cities and Counties"), fillColor = "#DDCC77", color = "#000000", weight =  1, fillOpacity = .85, label = ~NAME,
-    #               highlight = highlightOptions(weight = 2, color = "Black", bringToFront = TRUE),  popup = ~Popup)%>%
-    #   
-    #   addPolygons(data = States, group = "States", layerId = ~NAME, options = leafletOptions(pane = "States"), fillColor = "#117733", color = "#000000", weight =  .5, fillOpacity = .65, label = ~NAME,
-    #               highlight = highlightOptions(weight = 2, color = "Black", bringToFront = TRUE), popup = ~Popup)%>%
-    #   
-    #   addPolygons(data = Federal, group = "Federal", layerId = ~NAME, options = leafletOptions(pane = "Federal"), fillColor = "#b3b3b3", color = "#000000", weight =  .25, opacity = .5, label = ~NAME,
-    #               highlight = highlightOptions(weight = 1, color = "Black", bringToFront = TRUE),  popup = ~Popup)%>%
-    #   
-    #   addLayersControl(overlayGroups = c("Cities and Counties", "Federal", "States"), options = layersControlOptions(collapsed = FALSE))%>%
-    #   addProviderTiles(providers$CartoDB.VoyagerOnlyLabels, options = leafletOptions(pane = "Labels"))%>%
-    #   setView(-98.5795, 39.8283, zoom = 5)
+    }")
+  #   
+  #   # leaflet("Map")%>%
+  #   #   addProviderTiles(providers$CartoDB.VoyagerNoLabels)%>%
+  #   #   addMapPane("Cities and Counties", zIndex = 500)%>%
+  #   #   addMapPane("Federal", zIndex = 200) %>%
+  #   #   addMapPane("States", zIndex = 450) %>%
+  #   #   addMapPane("Labels", zIndex = 500) %>%
+  #   #   
+  #   #   addPolygons(data = CitiesCounties, group = "Cities and Counties", layerId = ~NAME,  options = leafletOptions(pane = "Cities and Counties"), fillColor = "#DDCC77", color = "#000000", weight =  1, fillOpacity = .85, label = ~NAME,
+  #   #               highlight = highlightOptions(weight = 2, color = "Black", bringToFront = TRUE),  popup = ~Popup)%>%
+  #   #   
+  #   #   addPolygons(data = States, group = "States", layerId = ~NAME, options = leafletOptions(pane = "States"), fillColor = "#117733", color = "#000000", weight =  .5, fillOpacity = .65, label = ~NAME,
+  #   #               highlight = highlightOptions(weight = 2, color = "Black", bringToFront = TRUE), popup = ~Popup)%>%
+  #   #   
+  #   #   addPolygons(data = Federal, group = "Federal", layerId = ~NAME, options = leafletOptions(pane = "Federal"), fillColor = "#b3b3b3", color = "#000000", weight =  .25, opacity = .5, label = ~NAME,
+  #   #               highlight = highlightOptions(weight = 1, color = "Black", bringToFront = TRUE),  popup = ~Popup)%>%
+  #   #   
+  #   #   addLayersControl(overlayGroups = c("Cities and Counties", "Federal", "States"), options = layersControlOptions(collapsed = FALSE))%>%
+  #   #   addProviderTiles(providers$CartoDB.VoyagerOnlyLabels, options = leafletOptions(pane = "Labels"))%>%
+  #   #   setView(-98.5795, 39.8283, zoom = 5)
   })
   
   
@@ -233,18 +259,18 @@ server <- function(input, output) {
                          "</b>", "<br>" , "<br>","<br>")
    
     # EJDef <- paste("<b>", "Environmental Justice Definition:","</b>", "<br>", ifelse(is.na(SelectedTool$EJ_Def_Det), "No Definition", SelectedTool$EJ_Def_Det), "<br>","<br>")
-    HTML(Description)
+    HTML(Description) 
   })
   output$video <- renderUI({
   Videolink <- paste(
                      "<br>",
-                     '<iframe width="300" height="169" src="https://www.youtube.com/embed/YftutAJeXAU?showinfo=0" frameborder="0" allowfullscreen></iframe>',
+                     '<iframe width="90%" height="300px" src="https://www.youtube.com/embed/YftutAJeXAU?showinfo=0" frameborder="0" allowfullscreen></iframe>',
                      "<br>", 
                      "<br>" )
   HTML(Videolink)
   })
   output$image <- renderUI({
-    img  = c("<img src='https://photos.smugmug.com/photos/i-XSjMkLd/0/X3/i-XSjMkLd-X3.jpg' width = 300 />")
+    img  = c("<img src='https://photos.smugmug.com/photos/i-XSjMkLd/0/X3/i-XSjMkLd-X3.jpg' width = 90% />")
     HTML(img)
     })
   ## Sidebar Content
